@@ -12,6 +12,7 @@ metadata:
   name: "livelens" 
   namespace: namespaces
 
+
 spec:
   namespace:
     #  Application K8s namespace
