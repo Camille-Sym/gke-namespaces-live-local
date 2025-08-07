@@ -1,0 +1,122 @@
+apiVersion: charts.symphony.com/v1alpha1
+
+kind: ExtendedNamespace
+
+metadata:
+  annotations:
+    helm.sdk.operatorframework.io/uninstall-wait: "true"
+  # Application K8s namespace
+  # Composed of <application>-<suffix> (max 8 chars - max 8 chars). Suffix can be empty. 
+  # If suffix is "-sand" argocd setup is not created.
+  # If your app won't be used by Sym clients, no need to use SDU suffix.
+  name: "livelens" 
+  namespace: namespaces
+
+spec:
+  namespace:
+    #  Application K8s namespace
+    name: "livelens" 
+
+    # Labelling information
+    labels:
+      # Application name (used for filtering)
+      application: "livelens" 
+      # Creator of the namespace's Symphony email
+      creator: "camille.vesiez@symphony.com" 
+      # Customer (defaults to sym)
+      customer: "sym" 
+      # Organization, Owner and Portfolio for billing
+      org: "sre" 
+      owner: "ci-cd" 
+      portfolio: "core-platform" 
+
+    # adminUsers and adminGroups cannot both be empty
+    # List of user emails with admin access
+    adminUsers: [] 
+    # List of groups with admin access (e.g., sym-sso-gcp-cicd-admin)
+    # Admin groups are break glass groups (empty) unless the suffix of namespace is 'sand'.
+    adminGroups:
+      - "sym-sso-gcp-cicd-admin@symphony.com"
+    # List of groups with developer access (for debugging)
+    devGroups: [] 
+
+    # 'true' = expose via Kong-Ext, 'false' = internal access only
+    isPublic: true 
+
+    # Pod-related information. We're talking here about Kubernetes Pods.
+    pods:
+      # Descriptive name for the pod (e.g., backend, worker, api, frontend, web, ui etc.)
+      - name: "app" 
+        # Outgoing network traffic from this pod
+        egress: 
+          # Opens traffic to the Datastores subnet of the same environment as this cluster, here MongoDB
+          - type: mongodb 
+          # Allow access to private managed internal services (e.g., Redis)
+          - type: privateManagedServices 
+          # Access to GitHub API (HTTPS and SSH).
+          - type: ext-api
+            name: github
+            ports:
+              # HTTPS
+              - port: 443
+                protocol: TCP 
+              # SSH
+              - port: 22
+                protocol: TCP 
+        # Incoming network traffic to this pod
+        ingress: 
+          # Allow public access via Kong External Ingress
+          # For kong-ext we need also to have isPublic: true
+          - type: kong-ext 
+            ports:
+              # HTTP/HTTPS
+              - port: 8080
+                protocol: TCP 
+          # Allow internal access via Kong Internal Ingress
+          - type: kong-int 
+          # Allow access from Grafana for monitoring
+          - type: namespace
+            name: grafana
+            ports:
+              - port: 9080
+                protocol: TCP
+
+    # ArgoCD setup
+    # This sets up an ArgoCD App that will pull from the git repo described below, and deploy to this namespace.
+    # Deploy is done on merge.
+    argocd: 
+      # Git SSH URL to your application's live repo
+      repoURL: "git@github.com:SymphonyOSF/livelens-live.git" 
+      # Git branch to track 
+      targetRevision: main 
+      # Path within the repo to your application's deployment manifests
+      path: "dev-use4-001/livelens" 
+      # ArgoCD expects in the above folder, a Chart.yaml, values.yaml file. We can pass here a values override file
+      helmValueFile: values.yaml 
+      #  This value is not used
+      helmChartRegistry: does-not-matter_the-value-is-not-used 
+
+    # Kubernetes secrets to be created in this namespace
+    secrets: 
+      - type: Kubernetes
+        name: livelens-keystore-password
+        raw: true
+      - type: Kubernetes
+        name: mng-dev-use4-shared-001-livelens-mongopassword
+        exists: true
+        raw: true
+        project: sym-dev-use4-data-01
+      - type: Kubernetes
+        name: mng-dev-use4-shared-001-livelens-mongouser
+        exists: true
+        raw: true
+        project: sym-dev-use4-data-01
+      - type: Kubernetes
+        name: github-app-id
+        raw: true
+      - type: Kubernetes
+        name: github-installation-id
+        raw: true
+      - type: Kubernetes
+        name: github-app-private-key
+        raw: true  
